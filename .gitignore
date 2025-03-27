@@ -1,0 +1,6 @@
+.env
+/plugins
+/logs
+/dags/__pycache__
+__pycache__
+.venv
