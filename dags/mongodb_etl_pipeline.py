@@ -7,13 +7,18 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 import logging
 import os
+import ssl
 
 # Load environment variables from .env file
 load_dotenv()
 
-# Use a default MONGO_URI if none is provided (for local testing)
-MONGO_URI = os.getenv(
-    'MONGO_URI', 'mongodb+srv://dev:RRMQJhiGu7xbjKOX@mycluster.0elq2.mongodb.net/?retryWrites=true&w=majority&appName=MyCluster')
+# Get MONGO_URI from environment or raise error if not set
+MONGO_URI = os.getenv('MONGO_URI')
+if not MONGO_URI:
+    raise ValueError(
+        "MONGO_URI is not set. Please define it in your environment or .env file.")
+
+logging.info("MONGO_URI loaded successfully.")
 
 # Default arguments for the DAG
 default_args = {
@@ -25,7 +30,6 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-# Define the DAG (at module level so Airflow can detect it)
 dag = DAG(
     'mongodb_etl_pipeline',
     default_args=default_args,
@@ -38,49 +42,68 @@ SOURCE_COLLECTION = "source_collection"
 DEST_COLLECTION = "dest_collection"
 
 
-def extract_data(**kwargs):
+def extract_data(**context):
     logging.info("Starting extraction...")
+    client = None
     try:
-        client = MongoClient(MONGO_URI)
+        client = MongoClient(
+            MONGO_URI,
+            tls=True,
+            tlsAllowInvalidCertificates=True,  # Only for testing; remove in production!
+            serverSelectionTimeoutMS=30000
+        )
         db = client["airflow_db"]
-        # Extract all documents from the source collection
         source_data = list(db[SOURCE_COLLECTION].find({}))
+        # Convert ObjectId fields to strings to make them JSON serializable
+        for doc in source_data:
+            if '_id' in doc:
+                doc['_id'] = str(doc['_id'])
         logging.info(
             f"Extracted {len(source_data)} records from {SOURCE_COLLECTION}.")
-        # Push the data to XCom for downstream tasks
-        kwargs['ti'].xcom_push(key='raw_data', value=source_data)
+        context['ti'].xcom_push(key='raw_data', value=source_data)
     except Exception as e:
-        logging.error(f"Extraction failed: {e}")
+        logging.exception("Extraction failed:")
         raise
     finally:
-        client.close()
+        if client:
+            client.close()
 
 
-def transform_data(**kwargs):
+def transform_data(**context):
     logging.info("Starting transformation...")
     try:
-        ti = kwargs['ti']
+        ti = context['ti']
         raw_data = ti.xcom_pull(key='raw_data', task_ids='extract_task')
+        if raw_data is None:
+            raise ValueError("No data received from extract_task.")
         transformed_data = []
         for record in raw_data:
-            # Example transformation: add a new field and remove _id field
             record['processed'] = True
+            # Optionally remove _id if you don't need it later:
             record.pop('_id', None)
             transformed_data.append(record)
         logging.info(f"Transformed {len(transformed_data)} records.")
         ti.xcom_push(key='transformed_data', value=transformed_data)
     except Exception as e:
-        logging.error(f"Transformation failed: {e}")
+        logging.exception("Transformation failed:")
         raise
 
 
-def load_data(**kwargs):
+def load_data(**context):
     logging.info("Starting load...")
+    client = None
     try:
-        ti = kwargs['ti']
+        ti = context['ti']
         transformed_data = ti.xcom_pull(
             key='transformed_data', task_ids='transform_task')
-        client = MongoClient(MONGO_URI)
+        if transformed_data is None:
+            raise ValueError("No data received from transform_task.")
+        client = MongoClient(
+            MONGO_URI,
+            tls=True,
+            tlsAllowInvalidCertificates=True,  # Only for testing; remove in production!
+            serverSelectionTimeoutMS=30000
+        )
         db = client["airflow_db"]
         if transformed_data:
             result = db[DEST_COLLECTION].insert_many(transformed_data)
@@ -89,10 +112,11 @@ def load_data(**kwargs):
         else:
             logging.info("No data to load.")
     except Exception as e:
-        logging.error(f"Loading failed: {e}")
+        logging.exception("Loading failed:")
         raise
     finally:
-        client.close()
+        if client:
+            client.close()
 
 
 extract_task = PythonOperator(
@@ -113,5 +137,4 @@ load_task = PythonOperator(
     dag=dag,
 )
 
-# Set task dependencies
 extract_task >> transform_task >> load_task

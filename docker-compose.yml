@@ -30,6 +30,8 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
+      # Set your MongoDB Atlas connection string here:
+      - MONGO_URI=mongodb+srv://dev:RRMQJhiGu7xbjKOX@mycluster.0elq2.mongodb.net/airflow_db?retryWrites=true&w=majority&appName=MyCluster
       - _PIP_ADDITIONAL_REQUIREMENTS=pymongo python-dotenv apache-airflow-providers-mongo
     volumes:
       - ./dags:/opt/airflow/dags
@@ -52,6 +54,7 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
+      - MONGO_URI=mongodb+srv://dev:RRMQJhiGu7xbjKOX@mycluster.0elq2.mongodb.net/airflow_db?retryWrites=true&w=majority&appName=MyCluster
       - _PIP_ADDITIONAL_REQUIREMENTS=pymongo python-dotenv apache-airflow-providers-mongo
     volumes:
       - ./dags:/opt/airflow/dags
@@ -72,6 +75,7 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
       - AIRFLOW__CELERY__BROKER_URL=redis://redis:6379/0
       - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@postgres/airflow
+      - MONGO_URI=mongodb+srv://dev:RRMQJhiGu7xbjKOX@mycluster.0elq2.mongodb.net/airflow_db?retryWrites=true&w=majority&appName=MyCluster
       - _PIP_ADDITIONAL_REQUIREMENTS=pymongo python-dotenv apache-airflow-providers-mongo
     volumes:
       - ./dags:/opt/airflow/dags
